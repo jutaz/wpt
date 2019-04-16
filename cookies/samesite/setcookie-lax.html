@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<meta charset="utf-8"/>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/cookies/resources/cookie-helper.sub.js"></script>
+<script>
+  promise_test(t => {
+    return new Promise((resolve, reject) =>  {
+      wait_for_message("READY", ORIGIN)
+        .then(_ => {
+          wait_for_message("set-complete", ORIGIN)
+            .then(e => {
+              assert_dom_cookie("samesite_strict", e.data.value, true);
+              assert_dom_cookie("samesite_lax", e.data.value, true);
+              assert_dom_cookie("samesite_none", e.data.value, true);
+              w.close();
+              resolve();
+            });
+          let random = "" + Math.random();
+          w.postMessage({type: "set", value: random}, "*");
+        });
+      let w = window.open(ORIGIN + "/cookies/samesite/resources/puppet.html");
+    });
+  }, "Same-site window should be able to set `SameSite=Lax` or `SameSite=Strict` cookies.");
+
+  promise_test(t => {
+    return new Promise((resolve, reject) =>  {
+      wait_for_message("READY", CROSS_SITE_ORIGIN)
+        .then(_ => {
+          wait_for_message("set-complete", CROSS_SITE_ORIGIN)
+            .then(e => {
+              assert_dom_cookie("samesite_strict", e.data.value, false);
+              assert_dom_cookie("samesite_lax", e.data.value, false);
+              assert_dom_cookie("samesite_none", e.data.value, true);
+              w.close();
+              resolve();
+            });
+          let random = "" + Math.random();
+          w.postMessage({type: "set", value: random}, "*");
+        });
+      let w = window.open(CROSS_SITE_ORIGIN + "/cookies/samesite/resources/puppet.html");
+    });
+  }, "Cross-site window shouldn't be able to set `SameSite=Lax` or `SameSite=Strict` cookies.");
+</script>

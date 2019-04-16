@@ -20,10 +20,6 @@
 
   // Set the global cookie name.
   window.HTTP_COOKIE = "cookie_via_http";
-
-  // If we're not on |HOST|, move ourselves there:
-  if (window.location.hostname != HOST)
-    window.location.hostname = HOST;
 })();
 
 // A tiny helper which returns the result of fetching |url| with credentials.
@@ -120,27 +116,49 @@ window.SameSiteStatus = {
   STRICT: "strict"
 };
 
+const wait_for_message = (type, origin) => {
+  return new Promise((resolve, reject) => {
+    window.addEventListener('message', e => {
+      if (e.origin != origin) {
+        reject("Warning: message from unexpected origin:" + e.origin);
+        return;
+      }
+
+      if (e.data.type && e.data.type === type)
+        resolve(e);
+    }, { once: true });
+  });
+};
+
 // Reset SameSite test cookies on |origin|. If |origin| matches `self.origin`, assert
 // (via `document.cookie`) that they were properly removed and reset.
 function resetSameSiteCookies(origin, value) {
-  return credFetch(origin + "/cookies/resources/dropSameSite.py")
-    .then(_ => {
-      if (origin == self.origin) {
-        assert_dom_cookie("samesite_strict", value, false);
-        assert_dom_cookie("samesite_lax", value, false);
-        assert_dom_cookie("samesite_none", value, false);
-      }
-    })
-    .then(_ => {
-      return credFetch(origin + "/cookies/resources/setSameSite.py?" + value)
-        .then(_ => {
+  return new Promise((resolve, reject) => {
+    wait_for_message("READY", origin).then(_ => {
+      wait_for_message("drop-complete", origin).then(_ => {;
+        if (origin == self.origin) {
+          assert_dom_cookie("samesite_strict", value, false);
+          assert_dom_cookie("samesite_lax", value, false);
+          assert_dom_cookie("samesite_none", value, false);
+        }
+
+        wait_for_message("set-complete", origin).then(_ => {
           if (origin == self.origin) {
             assert_dom_cookie("samesite_strict", value, true);
             assert_dom_cookie("samesite_lax", value, true);
             assert_dom_cookie("samesite_none", value, true);
           }
-        })
-    })
+          w.close();
+          resolve();
+        });
+
+        w.postMessage({type: "set", value: value, useOwnOrigin: true}, "*");
+      });
+
+      w.postMessage({type: "drop", useOwnOrigin: true}, "*");
+    });
+    let w = window.open(origin + "/cookies/samesite/resources/puppet.html");
+  });
 }
 
 // Given an |expectedStatus| and |expectedValue|, assert the |cookies| contains the
